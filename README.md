@@ -106,4 +106,65 @@ pip install --force-reinstall certifi
 
 ## .gitignore
 
-`.env`, `.venv/`, and `__pycache__/` are ignored so secrets and local environments stay out of the repository.
+`.env`, `env/`, `venv/`, `.venv/`, and `__pycache__/` are ignored so secrets and local environments stay out of the repository.
+
+---
+
+## Cryptocurrency Analytics Dashboard
+
+The project also includes a professional dark-themed cryptocurrency analytics dashboard (Flask backend + Chart.js frontend) powered by live Binance market data via the existing `binancedata.py` module.
+
+### Dashboard features
+
+- **Market Overview** — BTC and ETH prices, 24h change, volume, high/low, and aggregate market stats.
+- **Cryptocurrency Table** — searchable, sortable, filterable table of tradable pairs with price, 24h change, volume, high, and low.
+- **Interactive Price Charts** — historical kline charts with time windows: 1H, 24H, 7D, 30D, 1Y.
+- **Market Analytics** — top gainers and top losers.
+
+Public Binance market data requires **no API key**, so the dashboard works out of the box using the demo environment by default.
+
+### Run the dashboard
+
+1. Install dependencies (including the newly added Flask):
+
+```bash
+pip install -r requirements.txt
+```
+
+2. Copy the example environment file (optional — dashboard works without Binance keys for public data):
+
+```bash
+cp .env.example .env
+```
+
+3. Start the dashboard:
+
+```bash
+python dashboard.py
+```
+
+4. Open your browser at:
+
+```
+http://127.0.0.1:5000
+```
+
+Configuration is read from `.env` / environment variables: `BINANCE_MARKET`, `BINANCE_ENV`, `BINANCE_QUOTE`, `DASHBOARD_HOST`, `DASHBOARD_PORT`, `DASHBOARD_DEBUG`, `DASHBOARD_MIN_VOLUME`, and `DASHBOARD_TABLE_LIMIT`.
+`BINANCE_QUOTE` filters market pairs and sets the quote asset used by overview and chart symbols.
+
+Run the dashboard route tests with:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+### Project structure (dashboard additions)
+
+```
+templates/dashboard.html   # Dashboard HTML (Jinja2 template)
+static/css/style.css       # Dark premium styling
+static/js/dashboard.js     # Chart.js + data fetching
+dashboard.py               # Flask backend (reuses binancedata.py)
+```
+
+Existing RAG, OpenRouter, PDF, and Pinecone modules are unchanged.

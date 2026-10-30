@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crypto Analytics Dashboard | Binance</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body data-quote="{{ quote }}" data-min-volume="{{ min_volume }}" data-table-limit="{{ table_limit }}">
+    <!-- Navigation / Header -->
+    <header class="dashboard-header">
+        <div class="header-container">
+            <div class="brand">
+                <div class="brand-icon">▲</div>
+                <div class="brand-text">
+                    <div class="brand-name">CRYPTO<span>PULSE</span></div>
+                    <div class="brand-sub">Binance Analytics Dashboard</div>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="market-badge">
+                    <span class="badge-dot"></span>
+                    <span id="marketLabel">Binance <span id="marketEnv">Futures / Demo</span></span>
+                </div>
+                <div class="live-indicator" id="liveIndicator">
+                    <span class="pulse"></span>
+                    <span id="liveText">CONNECTING</span>
+                </div>
+                <div class="timestamp" id="serverTime">--:--:-- UTC</div>
+                <button class="refresh-button" id="refreshButton" type="button" aria-label="Refresh market data">
+                    <span class="refresh-icon" aria-hidden="true">↻</span>
+                    <span id="refreshText">Refresh</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="dashboard-container">
+        <!-- Alert / Error Banner -->
+        <div id="errorBanner" class="alert-banner error hidden" role="alert">
+            <span class="alert-icon">⚠</span>
+            <span id="errorMessage">Unable to connect to Binance API.</span>
+            <button class="alert-close" onclick="hideErrorBanner()">×</button>
+        </div>
+
+        <!-- Section 1: Market Overview -->
+        <section class="dashboard-section">
+            <h2 class="section-title">Market Overview</h2>
+            <div class="card-grid">
+                <!-- Total Market Cap / Pairs -->
+                <div class="stat-card primary">
+                    <div class="stat-label">Active Trading Pairs</div>
+                    <div class="stat-value" id="statPairs">-</div>
+                    <div class="stat-delta neutral" id="statPairsDelta">--</div>
+                </div>
+                <!-- Bitcoin -->
+                <div class="stat-card crypto btc">
+                    <div class="stat-row">
+                        <div class="stat-label">Bitcoin (BTC)</div>
+                        <div class="stat-symbol">BTC{{ quote }}</div>
+                    </div>
+                    <div class="stat-value" id="statBtcPrice">$0.00</div>
+                    <div class="stat-delta" id="statBtcChange">-</div>
+                    <div class="stat-meta">
+                        <span>Vol: <span id="statBtcVolume">-</span></span>
+                        <span class="sep">|</span>
+                        <span>High: <span id="statBtcHigh">-</span></span>
+                        <span class="sep">|</span>
+                        <span>Low: <span id="statBtcLow">-</span></span>
+                    </div>
+                </div>
+                <!-- Ethereum -->
+                <div class="stat-card crypto eth">
+                    <div class="stat-row">
+                        <div class="stat-label">Ethereum (ETH)</div>
+                        <div class="stat-symbol">ETH{{ quote }}</div>
+                    </div>
+                    <div class="stat-value" id="statEthPrice">$0.00</div>
+                    <div class="stat-delta" id="statEthChange">-</div>
+                    <div class="stat-meta">
+                        <span>Vol: <span id="statEthVolume">-</span></span>
+                        <span class="sep">|</span>
+                        <span>High: <span id="statEthHigh">-</span></span>
+                        <span class="sep">|</span>
+                        <span>Low: <span id="statEthLow">-</span></span>
+                    </div>
+                </div>
+                <!-- 24h Volume -->
+                <div class="stat-card accent">
+                    <div class="stat-label">24h Trading Volume ({{ quote }})</div>
+                    <div class="stat-value" id="statVolume">$0.00</div>
+                    <div class="stat-delta neutral" id="statVolumeDelta">--</div>
+                </div>
+                <!-- Market Sentiment -->
+                <div class="stat-card sentiment">
+                    <div class="stat-label">Market Sentiment</div>
+                    <div class="stat-value" id="statSentiment">-</div>
+                    <div class="stat-delta neutral" id="statSentimentDelta">--</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 2: Cryptocurrency Table -->
+        <section class="dashboard-section">
+            <div class="section-header table-section-header">
+                <h2 class="section-title">Cryptocurrency Table</h2>
+                <p class="section-hint">Select a symbol to chart it</p>
+                <div class="table-controls">
+                    <div class="search-box">
+                        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+                        <input type="search" id="tableSearch" placeholder="Search symbol (e.g. BTC)..." autocomplete="off">
+                    </div>
+                    <div class="filter-group">
+                        <label class="filter-label">Min 24h Volume</label>
+                        <select id="filterVolume">
+                            {% if min_volume not in [1000000, 10000000, 100000000, 1000000000] %}
+                            <option value="{{ min_volume }}" selected>{{ min_volume|int }}</option>
+                            {% endif %}
+                            <option value="1000000" {% if min_volume == 1000000 %}selected{% endif %}>$1M</option>
+                            <option value="10000000" {% if min_volume == 10000000 %}selected{% endif %}>$10M</option>
+                            <option value="100000000" {% if min_volume == 100000000 %}selected{% endif %}>$100M</option>
+                            <option value="1000000000" {% if min_volume == 1000000000 %}selected{% endif %}>$1B</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label class="filter-label">Rows</label>
+                        <select id="tableLimit">
+                            {% if table_limit not in [25, 50, 100] %}
+                            <option value="{{ table_limit }}" selected>{{ table_limit }}</option>
+                            {% endif %}
+                            <option value="25" {% if table_limit == 25 %}selected{% endif %}>25</option>
+                            <option value="50" {% if table_limit == 50 %}selected{% endif %}>50</option>
+                            <option value="100" {% if table_limit == 100 %}selected{% endif %}>100</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="table-wrapper">
+                <table id="cryptoTable">
+                    <thead>
+                        <tr>
+                            <th data-sort="symbol">Symbol <span class="sort-icon">↕</span></th>
+                            <th data-sort="price">Price <span class="sort-icon">↕</span></th>
+                            <th data-sort="change_percent">24h Change <span class="sort-icon">↕</span></th>
+                            <th data-sort="volume">24h Volume <span class="sort-icon">↕</span></th>
+                            <th data-sort="high">High <span class="sort-icon">↕</span></th>
+                            <th data-sort="low">Low <span class="sort-icon">↕</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="cryptoTableBody">
+                        <tr class="loading-row"><td colspan="6">Loading market data...</td></tr>
+                    </tbody>
+                </table>
+                <div id="tableEmpty" class="empty-state hidden">
+                    <p>No matching cryptocurrencies found.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 3: Interactive Price Charts -->
+        <section class="dashboard-section">
+            <div class="section-header">
+                <h2 class="section-title">Interactive Price Charts</h2>
+                <div class="chart-controls">
+                    <div class="chart-selector">
+                        <label class="chart-label">Symbol</label>
+                        <select id="chartSymbol">
+                            <option value="BTC{{ quote }}">Bitcoin (BTC{{ quote }})</option>
+                            <option value="ETH{{ quote }}">Ethereum (ETH{{ quote }})</option>
+                            <option value="BNB{{ quote }}">BNB (BNB{{ quote }})</option>
+                            <option value="SOL{{ quote }}">Solana (SOL{{ quote }})</option>
+                            <option value="XRP{{ quote }}">XRP (XRP{{ quote }})</option>
+                            <option value="ADA{{ quote }}">Cardano (ADA{{ quote }})</option>
+                            <option value="DOGE{{ quote }}">Dogecoin (DOGE{{ quote }})</option>
+                            <option value="AVAX{{ quote }}">Avalanche (AVAX{{ quote }})</option>
+                        </select>
+                    </div>
+                    <div class="time-filter-group">
+                        <label class="chart-label">Time Window</label>
+                        <div class="time-filter" id="timeFilter">
+                            <button class="time-btn active" data-window="1H">1H</button>
+                            <button class="time-btn" data-window="24H">24H</button>
+                            <button class="time-btn" data-window="7D">7D</button>
+                            <button class="time-btn" data-window="30D">30D</button>
+                            <button class="time-btn" data-window="1Y">1Y</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="chart-card">
+                <div class="chart-summary" aria-live="polite">
+                    <div class="chart-summary-symbol">
+                        <span class="chart-summary-label">Selected market</span>
+                        <strong id="chartPairLabel">BTC{{ quote }}</strong>
+                    </div>
+                    <div class="chart-summary-metric">
+                        <span class="chart-summary-label">Last price</span>
+                        <strong id="chartLastPrice">-</strong>
+                    </div>
+                    <div class="chart-summary-metric">
+                        <span class="chart-summary-label" id="chartWindowCaption">1H change</span>
+                        <strong id="chartWindowChange" class="neutral-text">-</strong>
+                    </div>
+                    <div class="chart-summary-range">
+                        <span>High <strong id="chartHigh">-</strong></span>
+                        <span>Low <strong id="chartLow">-</strong></span>
+                    </div>
+                </div>
+                <div class="chart-loading" id="chartLoading">Loading chart data...</div>
+                <div class="chart-container">
+                    <canvas id="priceChart"></canvas>
+                </div>
+                <div class="chart-empty" id="chartEmpty" style="display:none;">
+                    <p>No chart data available for this symbol.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 4: Market Analytics -->
+        <section class="dashboard-section analytics-section">
+            <div class="analytics-grid">
+                <!-- Top Gainers -->
+                <div class="analytics-card gainers-card">
+                    <div class="analytics-header">
+                        <h3>Top Gainers</h3>
+                        <div class="control">
+                            <select id="gainersTop">
+                                <option value="5">Top 5</option>
+                                <option value="10" selected>Top 10</option>
+                                <option value="20">Top 20</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="list-container">
+                        <table class="analytics-table">
+                            <thead><tr><th>Symbol</th><th>Price</th><th>24h Change</th><th>Volume</th></tr></thead>
+                            <tbody id="gainersTableBody">
+                                <tr class="loading-row"><td colspan="4">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Top Losers -->
+                <div class="analytics-card losers-card">
+                    <div class="analytics-header">
+                        <h3>Top Losers</h3>
+                        <div class="control">
+                            <select id="losersTop">
+                                <option value="5">Top 5</option>
+                                <option value="10" selected>Top 10</option>
+                                <option value="20">Top 20</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="list-container">
+                        <table class="analytics-table">
+                            <thead><tr><th>Symbol</th><th>Price</th><th>24h Change</th><th>Volume</th></tr></thead>
+                            <tbody id="losersTableBody">
+                                <tr class="loading-row"><td colspan="4">Loading...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="dashboard-footer">
+        <div class="footer-content">
+            <div class="footer-brand">CryptoPulse Analytics</div>
+            <div class="footer-info">
+                <span>Powered by Binance public market data</span>
+                <span class="separator">·</span>
+                <span>Backend: Python Flask · Frontend: Chart.js</span>
+                <span class="separator">·</span>
+                <span id="footerEnv"></span>
+            </div>
+            <div class="footer-disclaimer" style="font-size:0.75rem;opacity:0.5;">
+                Public market data only. No account data or API keys are exposed. Not financial advice.
+            </div>
+        </div>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>

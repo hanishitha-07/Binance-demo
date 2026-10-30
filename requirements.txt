@@ -5,3 +5,4 @@ pandas>=2.0
 pinecone>=10.0
 langchain-core>=1.0
 langchain-openai>=1.0
+flask>=2.3

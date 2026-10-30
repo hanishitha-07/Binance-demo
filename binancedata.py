@@ -67,9 +67,27 @@ TICKER_24HR_PATHS = {
     "futures": "/fapi/v1/ticker/24hr",
 }
 
+KLINE_PATHS = {
+    "spot": "/api/v3/klines",
+    "futures": "/fapi/v1/klines",
+}
+
 EXCHANGE_INFO_PATHS = {
     "spot": "/api/v3/exchangeInfo",
     "futures": "/fapi/v1/exchangeInfo",
+}
+
+# Binance kline interval strings and the number of points needed to cover each
+# dashboard time window. The frontend can request one of these windows and the
+# backend picks a sensible interval so the chart stays readable.
+KLINE_INTERVALS = ("1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w", "1M")
+
+KLINE_WINDOW_INTERVAL = {
+    "1H": ("1m", 60),      # last 60 minutes
+    "24H": ("1h", 24),     # last 24 hours
+    "7D": ("1h", 168),     # last 7 days
+    "30D": ("1d", 30),     # last 30 days
+    "1Y": ("1d", 365),     # last 12 months
 }
 
 ACCOUNT_PATHS = {
@@ -182,6 +200,90 @@ def fetch_24hr_tickers(
             df[column] = pd.to_numeric(df[column], errors="coerce")
 
     return df
+
+
+def fetch_klines(
+    base_url: str,
+    market: str,
+    symbol: str,
+    interval: str = "1h",
+    limit: int = 24,
+    session: requests.Session | None = None,
+) -> list[dict[str, Any]]:
+    """Return candlestick (kline) data for ``symbol``.
+
+    Each item is a dict with keys: open_time, open, high, low, close, volume,
+    close_time. Timestamps are UTC milliseconds. Public market data; no API key
+    required.
+    """
+    if interval not in KLINE_INTERVALS:
+        raise BinanceDataError(f"Unsupported kline interval: {interval}")
+
+    client = session or requests.Session()
+    url = f"{base_url}{KLINE_PATHS[market]}"
+    from urllib.parse import urlencode
+
+    params = urlencode(
+        {
+            "symbol": symbol.upper(),
+            "interval": interval,
+            "limit": min(max(int(limit), 1), 1000),
+        }
+    )
+    full_url = f"{url}?{params}"
+
+    try:
+        response = client.get(full_url, timeout=REQUEST_TIMEOUT_SECONDS)
+        response.raise_for_status()
+        payload = response.json()
+    except requests.Timeout as exc:
+        raise BinanceDataError(
+            f"Binance request timed out after {REQUEST_TIMEOUT_SECONDS} seconds."
+        ) from exc
+    except requests.HTTPError as exc:
+        status = exc.response.status_code if exc.response is not None else "unknown"
+        body = exc.response.text[:300] if exc.response is not None else ""
+        raise BinanceDataError(f"Binance returned HTTP {status}. {body}") from exc
+    except requests.RequestException as exc:
+        raise BinanceDataError(f"Network error while contacting Binance: {exc}") from exc
+    except ValueError as exc:
+        raise BinanceDataError("Binance returned invalid JSON.") from exc
+
+    if not isinstance(payload, list):
+        raise BinanceDataError("Binance kline response is not a list.")
+
+    columns = (
+        "open_time",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "close_time",
+        "quote_volume",
+        "count",
+        "taker_buy_base",
+        "taker_buy_quote",
+        "ignore",
+    )
+
+    rows: list[dict[str, Any]] = []
+    for item in payload:
+        if not isinstance(item, list) or len(item) < 6:
+            continue
+        row = dict(zip(columns, item))
+        row = {
+            "open_time": int(row["open_time"]),
+            "open": float(row["open"]),
+            "high": float(row["high"]),
+            "low": float(row["low"]),
+            "close": float(row["close"]),
+            "volume": float(row["volume"]),
+            "close_time": int(row["close_time"]),
+        }
+        rows.append(row)
+
+    return rows
 
 
 def fetch_tradable_symbols(
